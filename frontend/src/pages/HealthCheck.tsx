@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { checkHealth, checkHealthDb } from "../api/health";
 import type { HealthDbResponse } from "../api/health";
+import { config } from "../config";
 
 export function HealthCheck() {
   const [health, setHealth] = useState<HealthDbResponse | null>(null);
@@ -13,19 +14,28 @@ export function HealthCheck() {
         setLoading(true);
         setError(null);
 
+        console.log("[HealthCheck] Starting health check...");
+        console.log("[HealthCheck] API URL:", config.apiUrl);
+
         // First try with DB check
         try {
+          console.log("[HealthCheck] Attempting /health/db...");
           const dbHealth = await checkHealthDb();
+          console.log("[HealthCheck] /health/db response:", dbHealth);
           setHealth(dbHealth);
-        } catch (_) {
+        } catch (dbError) {
+          console.warn("[HealthCheck] /health/db failed:", dbError);
           // If DB check fails, try basic health
+          console.log("[HealthCheck] Attempting /health...");
           const basicHealth = await checkHealth();
+          console.log("[HealthCheck] /health response:", basicHealth);
           setHealth({
             ...basicHealth,
             database: "not checked",
           });
         }
       } catch (err) {
+        console.error("[HealthCheck] All health checks failed:", err);
         setError(err instanceof Error ? err.message : "Connection failed");
       } finally {
         setLoading(false);
@@ -40,16 +50,25 @@ export function HealthCheck() {
     setLoading(true);
     setError(null);
 
+    console.log("[HealthCheck] Manual refresh triggered");
+    console.log("[HealthCheck] API URL:", config.apiUrl);
+
     checkHealthDb()
-      .then(setHealth)
-      .catch(() => {
+      .then((response) => {
+        console.log("[HealthCheck] /health/db response:", response);
+        setHealth(response);
+      })
+      .catch((dbError) => {
+        console.warn("[HealthCheck] /health/db failed:", dbError);
         checkHealth()
-          .then((basicHealth) =>
-            setHealth({ ...basicHealth, database: "not checked" })
-          )
-          .catch((err) =>
-            setError(err instanceof Error ? err.message : "Connection failed")
-          );
+          .then((basicHealth) => {
+            console.log("[HealthCheck] /health response:", basicHealth);
+            setHealth({ ...basicHealth, database: "not checked" });
+          })
+          .catch((err) => {
+            console.error("[HealthCheck] All health checks failed:", err);
+            setError(err instanceof Error ? err.message : "Connection failed");
+          });
       })
       .finally(() => setLoading(false));
   };
@@ -66,7 +85,9 @@ export function HealthCheck() {
           <p>
             <strong>Error:</strong> {error}
           </p>
-          <p>Make sure the backend server is running on http://localhost:8000</p>
+          <p className="api-url">
+            <small>API URL: {config.apiUrl}</small>
+          </p>
         </div>
       )}
 
@@ -85,6 +106,10 @@ export function HealthCheck() {
               <tr>
                 <td>Database:</td>
                 <td>{health.database}</td>
+              </tr>
+              <tr>
+                <td>API URL:</td>
+                <td><small>{config.apiUrl}</small></td>
               </tr>
             </tbody>
           </table>
